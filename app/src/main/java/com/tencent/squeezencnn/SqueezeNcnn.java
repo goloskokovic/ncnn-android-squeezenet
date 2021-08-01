@@ -21,7 +21,7 @@ public class SqueezeNcnn
 {
     public native boolean Init(AssetManager mgr);
 
-    public native String Detect(Bitmap bitmap, boolean use_gpu);
+    public native Bitmap Detect(Bitmap bitmap, boolean use_gpu);
 
     static {
         System.loadLibrary("squeezencnn");
