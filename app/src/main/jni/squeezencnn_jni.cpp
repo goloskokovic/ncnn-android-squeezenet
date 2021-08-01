@@ -51,6 +51,30 @@ static std::vector<std::string> split_string(const std::string& str, const std::
     return strings;
 }
 
+static std::vector<std::pair<float, int> > print_topk(const std::vector<float>& cls_scores, int topk)
+{
+    // partial sort topk with index
+    int size = cls_scores.size();
+    std::vector<std::pair<float, int> > vec;
+    vec.resize(size);
+    for (int i = 0; i < size; i++)
+    {
+        vec[i] = std::make_pair(cls_scores[i], i);
+    }
+
+    std::partial_sort(vec.begin(), vec.begin() + topk, vec.end(),std::greater<std::pair<float, int> >());
+
+    // print topk and score
+    for (int i = 0; i < topk; i++)
+    {
+        float score = vec[i].first;
+        int index = vec[i].second;
+        fprintf(stderr, "%d = %f\n", index, score);
+    }
+
+    return vec;
+}
+
 extern "C" {
 
 JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void* reserved)
@@ -136,7 +160,7 @@ JNIEXPORT jboolean JNICALL Java_com_tencent_squeezencnn_SqueezeNcnn_Init(JNIEnv*
 }
 
 // public native String Detect(Bitmap bitmap, boolean use_gpu);
-JNIEXPORT jstring JNICALL Java_com_tencent_squeezencnn_SqueezeNcnn_Detect(JNIEnv* env, jobject thiz, jobject bitmap, jboolean use_gpu)
+JNIEXPORT jobject JNICALL Java_com_tencent_squeezencnn_SqueezeNcnn_Detect(JNIEnv* env, jobject thiz, jobject bitmap, jboolean use_gpu)
 {
     if (use_gpu == JNI_TRUE && ncnn::get_gpu_count() == 0)
     {
@@ -168,43 +192,45 @@ JNIEXPORT jstring JNICALL Java_com_tencent_squeezencnn_SqueezeNcnn_Detect(JNIEnv
         ex.set_vulkan_compute(use_gpu);
 
         ex.input(squeezenet_v1_1_param_id::BLOB_data, in);
+        std::vector<ncnn::Mat> weights(0);
 
-        ncnn::Mat out;
-        ex.extract(squeezenet_v1_1_param_id::BLOB_prob, out);
 
-        cls_scores.resize(out.w);
-        for (int j=0; j<out.w; j++)
+        ncnn::Mat pool10;
+        ex.extract(squeezenet_v1_1_param_id::LAYER_pool10, pool10);
+        jobject bitmapOut = bitmap;
+        pool10.to_android_bitmap(env, bitmapOut, ncnn::Mat::PIXEL_BGR);
+
+        return bitmapOut;
+
+        // manualy apply softmax on pool10 output
+        ncnn::Mat out = pool10;
         {
-            cls_scores[j] = out[j];
+            ncnn::Layer* softmax = ncnn::create_layer("Softmax");
+
+            ncnn::ParamDict pd;
+            //pd.set(1, 1);
+            softmax->load_param(pd);
+
+            softmax->forward_inplace(out, squeezenet.opt);
+            //out = out.reshape(out.w * out.h * out.c);
+
+            delete softmax;
         }
+
+        // sort top 3 softmax channels out of
+        cls_scores.resize(out.c);
+        for (int j = 0; j < out.c; j++) { cls_scores[j] = out[j]; }
+        std::vector<std::pair<float, int> > vec = print_topk(cls_scores, 3);
+
+        // get 3 pool10 channels by their top softmax
+        ncnn::Mat ch1 = pool10.channel(vec.at(0).first);
+        ncnn::Mat ch2 = pool10.channel(vec.at(1).first);
+        ncnn::Mat ch3 = pool10.channel(vec.at(2).first);
+
+        //ch1.to_android_bitmap(env, bitmapOut, ncnn::Mat::PIXEL_CONVERT_SHIFT);
+
     }
 
-    // return top class
-    int top_class = 0;
-    float max_score = 0.f;
-    for (size_t i=0; i<cls_scores.size(); i++)
-    {
-        float s = cls_scores[i];
-//         __android_log_print(ANDROID_LOG_DEBUG, "SqueezeNcnn", "%d %f", i, s);
-        if (s > max_score)
-        {
-            top_class = i;
-            max_score = s;
-        }
-    }
-
-    const std::string& word = squeezenet_words[top_class];
-    char tmp[32];
-    sprintf(tmp, "%.3f", max_score);
-    std::string result_str = std::string(word.c_str() + 10) + " = " + tmp;
-
-    // +10 to skip leading n03179701
-    jstring result = env->NewStringUTF(result_str.c_str());
-
-    double elasped = ncnn::get_current_time() - start_time;
-    __android_log_print(ANDROID_LOG_DEBUG, "SqueezeNcnn", "%.2fms   detect", elasped);
-
-    return result;
 }
 
 }
