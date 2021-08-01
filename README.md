@@ -5,7 +5,6 @@ The squeezenet image classification
 
 this is a sample ncnn android project, it depends on ncnn library only
 
-https://github.com/Tencent/ncnn
 
 ## how to build and run
 ### step1
