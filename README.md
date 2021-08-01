@@ -1,6 +1,7 @@
-# ncnn-android-squeezenet
+# ncnn-android-squeezenet-cthulhu
 
 The squeezenet image classification 
+![](architecture.png)
 
 this is a sample ncnn android project, it depends on ncnn library only
 
@@ -19,3 +20,5 @@ https://github.com/Tencent/ncnn/releases
 ## screenshot
 ![](screenshot.png)
 
+## channels
+![](channels.png)
