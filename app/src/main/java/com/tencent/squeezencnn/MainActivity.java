@@ -27,6 +27,8 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import java.io.FileNotFoundException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 public class MainActivity extends Activity
 {
@@ -37,6 +39,11 @@ public class MainActivity extends Activity
     private Bitmap yourSelectedImage = null;
 
     private SqueezeNcnn squeezencnn = new SqueezeNcnn();
+
+    /** A 4x4 grid to store information from LAYER_pool10 */
+    private byte[][] mGridVals;
+    /** An instance of the {@link CthulhuUsbInterface} class used to communicate with a Cthulhu device */
+    private CthulhuUsbInterface mCthulhu;
 
     /** Called when the activity is first created. */
     @Override
@@ -50,6 +57,9 @@ public class MainActivity extends Activity
         {
             Log.e("MainActivity", "squeezencnn Init failed");
         }
+
+        mCthulhu = new CthulhuUsbInterface(this);
+        mCthulhu.connectUsb();
 
         infoResult = (TextView) findViewById(R.id.infoResult);
         imageView = (ImageView) findViewById(R.id.imageView);
@@ -71,7 +81,7 @@ public class MainActivity extends Activity
                 if (yourSelectedImage == null)
                     return;
 
-                String result = squeezencnn.Detect(yourSelectedImage, false);
+                Bitmap result = squeezencnn.Detect(yourSelectedImage, false);
 
                 if (result == null)
                 {
@@ -79,7 +89,52 @@ public class MainActivity extends Activity
                 }
                 else
                 {
-                    infoResult.setText(result);
+                    //infoResult.setText(result);
+                    Bitmap rgba = result.copy(Bitmap.Config.ARGB_8888, true);
+                    // resize to 7x7
+                    yourSelectedImage = Bitmap.createScaledBitmap(rgba, 7, 7, false);
+                    rgba.recycle();
+
+                    imageView.setImageBitmap(result);
+
+
+                    // Reset grid values
+                    mGridVals = new byte[4][4];
+
+                    int[] pixels = new int[7*7];
+                    yourSelectedImage.getPixels(pixels, 0, yourSelectedImage.getWidth(), 0, 0, 7, 7);
+
+                    // If a CthulhuUsbInterface has been supplied, send data to turn on LEDs in response to LAYER_pool10 image
+                    if(mCthulhu != null) {
+                        String send = "";
+                        int jump = 14;
+                        for(int j = 0; j < 4; j++) {
+
+                            for(int i = 0; i < 4; i++) {
+                                int pixel = pixels[j+i+jump];
+
+                                int a = (pixel>>24) & 0xff; //get alpha
+                                int r = (pixel>>16) & 0xff; //get red
+                                int g = (pixel>>8) & 0xff; //get green
+                                int b = pixel & 0xff; //get blue
+
+                                // take max value from RGB channels
+                                int maxC = Math.max(Math.max(r,g),b);
+                                // maxC can't be 0
+                                mGridVals[j][i] = (byte)(maxC == 0 ? 1 : maxC);
+                                send += (char) mGridVals[j][i];
+                            }
+                            jump +=7;
+                        }
+                        // add first 0 for the array end, second will be added on the arduino
+                        send += "\0";
+
+                        //if(MainActivity.LOG) Log.d(TAG, "Sent: " + Arrays.toString(send.getBytes()));
+                        infoResult.setText(Arrays.toString(send.getBytes()));
+                        mCthulhu.write(send.getBytes());
+                    }
+
+                    yourSelectedImage = null;
                 }
             }
         });
@@ -91,7 +146,7 @@ public class MainActivity extends Activity
                 if (yourSelectedImage == null)
                     return;
 
-                String result = squeezencnn.Detect(yourSelectedImage, true);
+                Bitmap result = squeezencnn.Detect(yourSelectedImage, true);
 
                 if (result == null)
                 {
@@ -99,7 +154,8 @@ public class MainActivity extends Activity
                 }
                 else
                 {
-                    infoResult.setText(result);
+                    imageView.setImageBitmap(result);
+                    yourSelectedImage = null;
                 }
             }
         });
