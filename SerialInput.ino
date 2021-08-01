@@ -68,7 +68,7 @@ void loop()
       }
 
       //set pixel value close to 150 for IP
-      IP[e+2]=((int)data[e]/10)*30; // floor the value return tu 255 range and amplify by 3
+      IP[e+2]=((int)data[e]/10)*30; // floor the value and amplify by 3
     }
     
     mycthulhu.UpdateStimuli(array, PP, Pp, IN, IP, ON);
