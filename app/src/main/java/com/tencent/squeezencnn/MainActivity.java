@@ -107,7 +107,8 @@ public class MainActivity extends Activity
                     // If a CthulhuUsbInterface has been supplied, send data to turn on LEDs in response to LAYER_pool10 image
                     if(mCthulhu != null) {
                         String send = "";
-                        int jump = 14;
+                        // jump 2 rows of 7x7
+                        int jump = 2*7;
                         for(int j = 0; j < 4; j++) {
 
                             for(int i = 0; i < 4; i++) {
@@ -124,12 +125,12 @@ public class MainActivity extends Activity
                                 mGridVals[j][i] = (byte)(maxC == 0 ? 1 : maxC);
                                 send += (char) mGridVals[j][i];
                             }
+                            // next row same column
                             jump +=7;
                         }
                         // add first 0 for the array end, second will be added on the arduino
                         send += "\0";
 
-                        //if(MainActivity.LOG) Log.d(TAG, "Sent: " + Arrays.toString(send.getBytes()));
                         infoResult.setText(Arrays.toString(send.getBytes()));
                         mCthulhu.write(send.getBytes());
                     }
